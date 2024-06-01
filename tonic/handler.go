@@ -1,6 +1,7 @@
 package tonic
 
 import (
+	"encoding"
 	"fmt"
 	"reflect"
 	"runtime"
@@ -18,16 +19,24 @@ var (
 	validatorOnce sync.Once
 )
 
+// BindUnmarshaler is the interface used to wrap the UnmarshalParam method.
+// Types that don't implement this, but do implement encoding.TextUnmarshaler
+// will use that interface instead.
+type BindUnmarshaler interface {
+	// UnmarshalParam decodes and assigns a value from an form or query param.
+	UnmarshalParam(param string) error
+}
+
 // Handler returns a Gin HandlerFunc that wraps the handler passed
 // in parameters.
 // The handler may use the following signature:
 //
-//  func(*gin.Context, [input object ptr]) ([output object], error)
+//	func(*gin.Context, [input object ptr]) ([output object], error)
 //
 // Input and output objects are both optional.
 // As such, the minimal accepted signature is:
 //
-//  func(*gin.Context) error
+//	func(*gin.Context) error
 //
 // The wrapping gin-handler will bind the parameters from the query-string,
 // path, body and headers, and handle the errors.
@@ -164,13 +173,13 @@ func RegisterValidation(tagName string, validationFunc validator.Func) error {
 //
 // eg. to use the names which have been specified for JSON representations of structs, rather than normal Go field names:
 //
-//    tonic.RegisterTagNameFunc(func(fld reflect.StructField) string {
-//        name := strings.SplitN(fld.Tag.Get("json"), ",", 2)[0]
-//        if name == "-" {
-//            return ""
-//        }
-//        return name
-//    }
+//	tonic.RegisterTagNameFunc(func(fld reflect.StructField) string {
+//	    name := strings.SplitN(fld.Tag.Get("json"), ",", 2)[0]
+//	    if name == "-" {
+//	        return ""
+//	    }
+//	    return name
+//	}
 func RegisterTagNameFunc(registerTagFunc validator.TagNameFunc) {
 	initValidator()
 	validatorObj.RegisterTagNameFunc(registerTagFunc)
@@ -263,6 +272,17 @@ func bind(c *gin.Context, v reflect.Value, tag string, extract extractor) error 
 		if len(fieldValues) > 1 && (kind != reflect.Slice && kind != reflect.Array) {
 			return BindError{field: ft.Name, typ: t, message: "multiple values not supported"}
 		}
+
+		// Handle custom unmarshalers.
+		if field.Kind() != reflect.Ptr {
+			if ok, err := unmarshalFieldNonPtr(fieldValues[0], field); ok {
+				if err != nil {
+					return BindError{field: ft.Name, typ: t, message: err.Error()}
+				}
+				continue
+			}
+		}
+
 		// Ensure that the number of values to fill does
 		// not exceed the length of a field of type Array.
 		if kind == reflect.Array {
@@ -312,6 +332,18 @@ func bind(c *gin.Context, v reflect.Value, tag string, extract extractor) error 
 		}
 	}
 	return nil
+}
+
+func unmarshalFieldNonPtr(value string, field reflect.Value) (bool, error) {
+	fieldIValue := field.Addr().Interface()
+	if unmarshaler, ok := fieldIValue.(BindUnmarshaler); ok {
+		return true, unmarshaler.UnmarshalParam(value)
+	}
+	if unmarshaler, ok := fieldIValue.(encoding.TextUnmarshaler); ok {
+		return true, unmarshaler.UnmarshalText([]byte(value))
+	}
+
+	return false, nil
 }
 
 // input checks the input parameters of a tonic handler
