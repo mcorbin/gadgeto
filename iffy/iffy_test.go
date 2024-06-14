@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/ccfish86/gadgeto/iffy"
+	"github.com/ccfish86/gadgeto/tonic"
 	"github.com/gin-gonic/gin"
-	"github.com/mcorbin/gadgeto/iffy"
-	"github.com/mcorbin/gadgeto/tonic"
 )
 
 func helloHandler(c *gin.Context) (interface{}, error) {
