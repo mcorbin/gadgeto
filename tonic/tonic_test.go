@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ccfish86/gadgeto/iffy"
+	"github.com/ccfish86/gadgeto/tonic"
 	"github.com/gin-gonic/gin"
-	"github.com/mcorbin/gadgeto/iffy"
-	"github.com/mcorbin/gadgeto/tonic"
 )
 
 var r http.Handler
